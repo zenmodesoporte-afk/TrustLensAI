@@ -23,7 +23,7 @@ class Product(BaseModel):
     brand: str | None = None
     url: str
 
-# --- LISTA DE MARCAS VIP (SI EL PRODUCTO ES DE ESTAS, ES SEGURO) ---
+# --- LISTA DE MARCAS VIP (La "Lista Blanca") ---
 MARCAS_VIP = [
     "sony", "samsung", "apple", "xiaomi", "lg", "philips", "bosch", 
     "logitech", "hp", "lenovo", "asus", "dell", "cosori", "cecotec", 
@@ -32,101 +32,158 @@ MARCAS_VIP = [
     "amazfit", "dodot", "pampers", "lego", "barbie", "playmobil",
     "fischer", "black+decker", "makita", "bosch professional",
     "royal canin", "purina", "isdin", "la roche-posay", "garnier",
-    "l'oreal", "maybelline", "ghd", "rowenta", "tefal", "moulinex"
+    "l'oreal", "maybelline", "ghd", "rowenta", "tefal", "moulinex",
+    "dewalt", "stanley", "kärcher", "dyson", "irobot", "tous", "pandora"
 ]
 
-# --- BASE DE DATOS MASIVA (Cubre las búsquedas TOP de Amazon) ---
+# --- BASE DE DATOS DE RECOMENDACIONES MULTI-OPCIÓN ---
+# Formato: "palabra_clave": [ {Opción 1}, {Opción 2}, {Opción 3} ]
 PRODUCTOS_TOP = {
-    # --- TECNOLOGÍA & GADGETS ---
-    "iphone": {"name": "iPhone 13 (Oferta Top)", "link": "https://www.amazon.es/dp/B09G9DMQ7Z"},
-    "samsung galaxy": {"name": "Samsung Galaxy A54", "link": "https://www.amazon.es/dp/B0BYR85X67"},
-    "xiaomi": {"name": "Xiaomi Redmi Note 13", "link": "https://www.amazon.es/dp/B0CQM3F5D9"},
-    "auriculares": {"name": "Sony WH-CH520", "link": "https://www.amazon.es/dp/B0BS1QCF54"},
-    "cascos": {"name": "Sony WH-CH520", "link": "https://www.amazon.es/dp/B0BS1QCF54"},
-    "inalambricos": {"name": "Soundcore P20i", "link": "https://www.amazon.es/dp/B0BTYV49Y2"},
-    "tablet": {"name": "Samsung Galaxy Tab A9+", "link": "https://www.amazon.es/dp/B0CL5C422L"},
-    "ipad": {"name": "iPad 2022 10.9", "link": "https://www.amazon.es/dp/B0BJLC6Z2M"},
-    "kindle": {"name": "Kindle Paperwhite", "link": "https://www.amazon.es/dp/B08N3TCP2F"},
-    "ebook": {"name": "Kindle Paperwhite", "link": "https://www.amazon.es/dp/B08N3TCP2F"},
-    "alexa": {"name": "Echo Dot 5ª Gen", "link": "https://www.amazon.es/dp/B09B8X98F3"},
-    "echo dot": {"name": "Echo Dot 5ª Gen", "link": "https://www.amazon.es/dp/B09B8X98F3"},
-    "fire tv": {"name": "Fire TV Stick 4K", "link": "https://www.amazon.es/dp/B08XVVPXX4"},
-    "smartwatch": {"name": "Xiaomi Smart Band 8", "link": "https://www.amazon.es/dp/B0CFRCT61X"},
-    "pulsera": {"name": "Xiaomi Smart Band 8", "link": "https://www.amazon.es/dp/B0CFRCT61X"},
-    "reloj": {"name": "Amazfit GTS 4 Mini", "link": "https://www.amazon.es/dp/B0B596F3V6"},
-    "portatil": {"name": "HP 15s Laptop", "link": "https://www.amazon.es/dp/B0C3R5L5L8"},
-    "ordenador": {"name": "HP 15s Laptop", "link": "https://www.amazon.es/dp/B0C3R5L5L8"},
-    "raton": {"name": "Logitech G502 HERO", "link": "https://www.amazon.es/dp/B07W7MQMD9"},
-    "teclado": {"name": "Logitech MK295", "link": "https://www.amazon.es/dp/B08GP3C8YJ"},
-    "monitor": {"name": "MSI PRO MP243", "link": "https://www.amazon.es/dp/B0B61XY598"},
-    "disco duro": {"name": "Crucial X6 1TB SSD", "link": "https://www.amazon.es/dp/B08W1F8YGJ"},
-    "ssd": {"name": "Crucial X6 1TB SSD", "link": "https://www.amazon.es/dp/B08W1F8YGJ"},
-    "cargador": {"name": "Anker 20W Nano", "link": "https://www.amazon.es/dp/B08V54S9WD"},
-    "power bank": {"name": "Anker Batería Externa", "link": "https://www.amazon.es/dp/B07S829LBX"},
-    "bateria": {"name": "Anker Batería Externa", "link": "https://www.amazon.es/dp/B07S829LBX"},
+    # --- TECNOLOGÍA: MÓVILES Y TABLETS ---
+    "iphone": [
+        {"name": "iPhone 13 (Calidad/Precio)", "link": "https://www.amazon.es/dp/B09G9DMQ7Z"},
+        {"name": "iPhone 15 (Último Modelo)", "link": "https://www.amazon.es/dp/B0CHXdmF9K"}
+    ],
+    "samsung galaxy": [
+        {"name": "Samsung Galaxy A54 (Top Ventas)", "link": "https://www.amazon.es/dp/B0BYR85X67"},
+        {"name": "Samsung S23 Ultra (Premium)", "link": "https://www.amazon.es/dp/B0BTZ595F5"}
+    ],
+    "xiaomi": [
+        {"name": "Xiaomi Redmi Note 13 (Económico)", "link": "https://www.amazon.es/dp/B0CQM3F5D9"},
+        {"name": "POCO X6 Pro (Potencia)", "link": "https://www.amazon.es/dp/B0CRVTFV1X"}
+    ],
+    "movil": [
+        {"name": "Samsung Galaxy A54 (Android Recomendado)", "link": "https://www.amazon.es/dp/B0BYR85X67"},
+        {"name": "Google Pixel 7a (Mejor Cámara)", "link": "https://www.amazon.es/dp/B0BZJE5L39"},
+        {"name": "Xiaomi Redmi 13C (Barato)", "link": "https://www.amazon.es/dp/B0CMZFV6GY"}
+    ],
+    "smartphone": [
+         {"name": "Samsung Galaxy A54", "link": "https://www.amazon.es/dp/B0BYR85X67"},
+         {"name": "Google Pixel 7a", "link": "https://www.amazon.es/dp/B0BZJE5L39"}
+    ],
+    "tablet": [
+        {"name": "Samsung Galaxy Tab A9+ (Calidad)", "link": "https://www.amazon.es/dp/B0CL5C422L"},
+        {"name": "Lenovo Tab M10 (Económica)", "link": "https://www.amazon.es/dp/B09VNFX272"}
+    ],
+    "ipad": [
+        {"name": "iPad 2022 10.9 (Apple)", "link": "https://www.amazon.es/dp/B0BJLC6Z2M"}
+    ],
 
-    # --- HOGAR & COCINA ---
-    "freidora": {"name": "Cosori 5.5L Air Fryer", "link": "https://www.amazon.es/dp/B07N8N6C85"},
-    "air fryer": {"name": "Cosori 5.5L Air Fryer", "link": "https://www.amazon.es/dp/B07N8N6C85"},
-    "cafetera": {"name": "De'Longhi Nespresso", "link": "https://www.amazon.es/dp/B00J65BBGY"},
-    "nespresso": {"name": "De'Longhi Nespresso", "link": "https://www.amazon.es/dp/B00J65BBGY"},
-    "aspiradora": {"name": "Rowenta X-Pert", "link": "https://www.amazon.es/dp/B08N5H711V"},
-    "robot aspirador": {"name": "roborock Q7 Max", "link": "https://www.amazon.es/dp/B09S3RPY7W"},
-    "roomba": {"name": "iRobot Roomba", "link": "https://www.amazon.es/dp/B08H72T84L"},
-    "batidora": {"name": "Moulinex QuickChef", "link": "https://www.amazon.es/dp/B075QDHYX9"},
-    "sarten": {"name": "Tefal Unlimited On", "link": "https://www.amazon.es/dp/B08BR2W7D8"},
-    "almohada": {"name": "Pikolin Home Visco", "link": "https://www.amazon.es/dp/B00L2IKZCI"},
-    "colchon": {"name": "Emma Original", "link": "https://www.amazon.es/dp/B079VXS5KT"},
-    "ventilador": {"name": "Cecotec EnergySilence", "link": "https://www.amazon.es/dp/B085GG74K2"},
-    "aire acondicionado": {"name": "Comfee Portátil", "link": "https://www.amazon.es/dp/B089DJVX24"},
-    "estufa": {"name": "Orbegozo HBF 90", "link": "https://www.amazon.es/dp/B00F2N7FGI"},
-    "microondas": {"name": "Cecotec ProClean", "link": "https://www.amazon.es/dp/B07G3LSV4M"},
+    # --- AUDIO Y ORDENADORES ---
+    "auriculares": [
+        {"name": "Sony WH-CH520 (Calidad/Precio)", "link": "https://www.amazon.es/dp/B0BS1QCF54"},
+        {"name": "Soundcore Q20i (Cancelación Ruido)", "link": "https://www.amazon.es/dp/B0C3HFE4X8"},
+        {"name": "Sony WH-1000XM5 (Gama Alta)", "link": "https://www.amazon.es/dp/B09Y2MYL5C"}
+    ],
+    "inalambricos": [
+        {"name": "Soundcore P20i (Top Ventas)", "link": "https://www.amazon.es/dp/B0BTYV49Y2"},
+        {"name": "Xiaomi Redmi Buds 4 (Baratos)", "link": "https://www.amazon.es/dp/B0C39X5R5B"}
+    ],
+    "altavoz": [
+        {"name": "JBL Flip 6 (Sonido Top)", "link": "https://www.amazon.es/dp/B09V7D322V"},
+        {"name": "Anker Soundcore 3 (Económico)", "link": "https://www.amazon.es/dp/B08B8PG37S"}
+    ],
+    "portatil": [
+        {"name": "HP 15s (Oficina/Estudios)", "link": "https://www.amazon.es/dp/B0C3R5L5L8"},
+        {"name": "Lenovo IdeaPad Slim 3 (Oferta)", "link": "https://www.amazon.es/dp/B0C3R5L5L8"},
+        {"name": "MacBook Air M1 (Premium)", "link": "https://www.amazon.es/dp/B08N5T6CZ6"}
+    ],
+    "monitor": [
+        {"name": "MSI PRO MP243 (24\" IPS)", "link": "https://www.amazon.es/dp/B0B61XY598"},
+        {"name": "BenQ GW2480 (Cuidado Ocular)", "link": "https://www.amazon.es/dp/B073NTCT4Q"}
+    ],
+    "raton": [
+        {"name": "Logitech G502 HERO (Gaming)", "link": "https://www.amazon.es/dp/B07W7MQMD9"},
+        {"name": "Logitech M185 (Sencillo)", "link": "https://www.amazon.es/dp/B004YD8CPO"}
+    ],
 
-    # --- BELLEZA & SALUD ---
-    "cepillo": {"name": "Oral-B Pro 3", "link": "https://www.amazon.es/dp/B095C2P93L"},
-    "oral-b": {"name": "Oral-B Pro 3", "link": "https://www.amazon.es/dp/B095C2P93L"},
-    "afeitadora": {"name": "Philips OneBlade", "link": "https://www.amazon.es/dp/B01BGH45Q0"},
-    "depiladora": {"name": "Braun Silk-épil 9", "link": "https://www.amazon.es/dp/B07T751N8J"},
-    "secador": {"name": "Parlux Advance Light", "link": "https://www.amazon.es/dp/B01CJLA7C2"},
-    "plancha pelo": {"name": "ghd gold original", "link": "https://www.amazon.es/dp/B078HF5P76"},
-    "ghd": {"name": "ghd gold original", "link": "https://www.amazon.es/dp/B078HF5P76"},
-    "crema": {"name": "ISDIN Fotoprotector", "link": "https://www.amazon.es/dp/B07PHR8K6X"},
-    "proteina": {"name": "Optimum Nutrition Whey", "link": "https://www.amazon.es/dp/B000QSNYGI"},
-    "creatina": {"name": "Creatina Monohidrato", "link": "https://www.amazon.es/dp/B002DYIZEO"},
+    # --- HOGAR Y COCINA ---
+    "freidora": [
+        {"name": "Cosori 5.5L (La más vendida)", "link": "https://www.amazon.es/dp/B07N8N6C85"},
+        {"name": "Cecotec Cecofry 6L (Barata)", "link": "https://www.amazon.es/dp/B09J1GLJCZ"}
+    ],
+    "air fryer": [
+        {"name": "Cosori 5.5L", "link": "https://www.amazon.es/dp/B07N8N6C85"}
+    ],
+    "aspiradora": [
+        {"name": "Roborock Q7 Max (Robot Top)", "link": "https://www.amazon.es/dp/B09S3RPY7W"},
+        {"name": "Rowenta X-Pert (Escoba)", "link": "https://www.amazon.es/dp/B08N5H711V"},
+        {"name": "Cecotec Conga (Económico)", "link": "https://www.amazon.es/dp/B08H93ZRLL"}
+    ],
+    "cafetera": [
+        {"name": "Nespresso Inissia (Cápsulas)", "link": "https://www.amazon.es/dp/B00J65BBGY"},
+        {"name": "Cecotec Power Espresso (Barista)", "link": "https://www.amazon.es/dp/B07GSTVFJK"}
+    ],
+    "batidora": [
+        {"name": "Moulinex QuickChef (Potente)", "link": "https://www.amazon.es/dp/B075QDHYX9"},
+        {"name": "Braun Minipimer (Clásica)", "link": "https://www.amazon.es/dp/B07T751N8J"}
+    ],
+    "sarten": [
+        {"name": "Tefal Unlimited On (Anti-rayas)", "link": "https://www.amazon.es/dp/B08BR2W7D8"},
+        {"name": "BRA Efficient (Lote 3)", "link": "https://www.amazon.es/dp/B003WOKJ9S"}
+    ],
+    "ventilador": [
+        {"name": "Cecotec EnergySilence (Pie)", "link": "https://www.amazon.es/dp/B085GG74K2"},
+        {"name": "Rowenta Turbo Silence (Silencioso)", "link": "https://www.amazon.es/dp/B01CJLA7C2"}
+    ],
 
-    # --- BEBÉ & JUGUETES ---
-    "pañales": {"name": "Dodot Bebé-Seco", "link": "https://www.amazon.es/dp/B07Z8L3X9Z"},
-    "dodot": {"name": "Dodot Bebé-Seco", "link": "https://www.amazon.es/dp/B07Z8L3X9Z"},
-    "toallitas": {"name": "Dodot Aqua Pure", "link": "https://www.amazon.es/dp/B07CXVSK2V"},
-    "silla coche": {"name": "Cybex Silver Solution", "link": "https://www.amazon.es/dp/B005XR3KCA"},
-    "lego": {"name": "LEGO Star Wars", "link": "https://www.amazon.es/dp/B09Q471R78"},
-    "playmobil": {"name": "Playmobil City Life", "link": "https://www.amazon.es/dp/B0766CCV7L"},
-    "juego mesa": {"name": "Dobble", "link": "https://www.amazon.es/dp/B00F5MB2N8"},
-    "barbie": {"name": "Barbie Dreamtopia", "link": "https://www.amazon.es/dp/B07GLKDY59"},
+    # --- BELLEZA Y CUIDADO ---
+    "cepillo": [
+        {"name": "Oral-B Pro 3 (Recomendado)", "link": "https://www.amazon.es/dp/B095C2P93L"},
+        {"name": "Philips Sonicare (Sónico)", "link": "https://www.amazon.es/dp/B09B8X98F3"}
+    ],
+    "afeitadora": [
+        {"name": "Philips OneBlade (Cara/Cuerpo)", "link": "https://www.amazon.es/dp/B01BGH45Q0"},
+        {"name": "Braun Series 5 (Eléctrica)", "link": "https://www.amazon.es/dp/B08H99BPJN"}
+    ],
+    "depiladora": [
+        {"name": "Braun Silk-épil 9 (Rápida)", "link": "https://www.amazon.es/dp/B07T751N8J"},
+        {"name": "Philips Lumea (Luz Pulsada)", "link": "https://www.amazon.es/dp/B08H93ZRLL"}
+    ],
+    "secador": [
+        {"name": "Remington Ionic (Profesional)", "link": "https://www.amazon.es/dp/B003WOKJ9S"},
+        {"name": "Parlux Advance (Alta Gama)", "link": "https://www.amazon.es/dp/B01CJLA7C2"}
+    ],
+    "creatina": [
+        {"name": "Creatina Monohidrato (Pura)", "link": "https://www.amazon.es/dp/B002DYIZEO"}
+    ],
+    "proteina": [
+        {"name": "Optimum Nutrition Whey", "link": "https://www.amazon.es/dp/B000QSNYGI"}
+    ],
 
-    # --- VIDEOJUEGOS ---
-    "ps5": {"name": "PlayStation 5 Slim", "link": "https://www.amazon.es/dp/B0CLT54ZLW"},
-    "playstation": {"name": "PlayStation 5 Slim", "link": "https://www.amazon.es/dp/B0CLT54ZLW"},
-    "switch": {"name": "Nintendo Switch OLED", "link": "https://www.amazon.es/dp/B098RJXBTY"},
-    "nintendo": {"name": "Nintendo Switch OLED", "link": "https://www.amazon.es/dp/B098RJXBTY"},
-    "xbox": {"name": "Xbox Series X", "link": "https://www.amazon.es/dp/B08H93ZRLL"},
-    "mando": {"name": "Mando PS5 DualSense", "link": "https://www.amazon.es/dp/B08H99BPJN"},
+    # --- JUGUETES Y BEBÉ ---
+    "lego": [
+        {"name": "LEGO Star Wars (Top)", "link": "https://www.amazon.es/dp/B09Q471R78"},
+        {"name": "LEGO Technic (Coches)", "link": "https://www.amazon.es/dp/B09Q4N5Z3J"}
+    ],
+    "playmobil": [
+        {"name": "Playmobil City Life", "link": "https://www.amazon.es/dp/B0766CCV7L"}
+    ],
+    "pañales": [
+        {"name": "Dodot Bebé-Seco (Mensual)", "link": "https://www.amazon.es/dp/B07Z8L3X9Z"},
+        {"name": "Dodot Aqua Pure (Toallitas)", "link": "https://www.amazon.es/dp/B07CXVSK2V"}
+    ],
+    "silla coche": [
+        {"name": "Cybex Solution (Segura)", "link": "https://www.amazon.es/dp/B005XR3KCA"}
+    ],
 
-    # --- MASCOTAS ---
-    "perro": {"name": "Comida Perro Advance", "link": "https://www.amazon.es/dp/B01F3ELT2C"},
-    "gato": {"name": "Comida Gato Purina", "link": "https://www.amazon.es/dp/B07P8W6C8X"},
-    "arena": {"name": "Arena Aglomerante", "link": "https://www.amazon.es/dp/B003V67A8Q"},
-    "rascador": {"name": "Rascador Árbol Gatos", "link": "https://www.amazon.es/dp/B073P5G4XL"},
-
-    # --- BRICOLAJE ---
-    "taladro": {"name": "Bosch Professional 12V", "link": "https://www.amazon.es/dp/B00D5U932W"},
-    "atornillador": {"name": "Bosch IXO", "link": "https://www.amazon.es/dp/B07X9VGQ3L"},
-    "caja herramientas": {"name": "STANLEY Caja", "link": "https://www.amazon.es/dp/B0001I1D2W"},
-
-    # --- EQUIPAJE Y MOCHILAS ---
-    "mochila": {"name": "Samsonite Guardit 2.0", "link": "https://www.amazon.es/dp/B07NHX3R35"},
-    "maleta": {"name": "American Tourister", "link": "https://www.amazon.es/dp/B01M33B85P"},
-    "bolso": {"name": "Bolso Mujer Tous", "link": "https://www.amazon.es/dp/B07L5G3X8Z"}
+    # --- VARIOS Y DEPORTES ---
+    "taladro": [
+        {"name": "Bosch Professional 12V", "link": "https://www.amazon.es/dp/B00D5U932W"},
+        {"name": "Black+Decker (Hogar)", "link": "https://www.amazon.es/dp/B0114RJ7DG"}
+    ],
+    "mochila": [
+        {"name": "Samsonite Guardit 2.0", "link": "https://www.amazon.es/dp/B07NHX3R35"},
+        {"name": "Eastpak Padded (Escolar)", "link": "https://www.amazon.es/dp/B0001I1D2W"}
+    ],
+    "reloj": [
+        {"name": "Amazfit GTS 4 Mini (Smart)", "link": "https://www.amazon.es/dp/B0B596F3V6"},
+        {"name": "Casio G-SHOCK (Resistente)", "link": "https://www.amazon.es/dp/B000GAYQKY"}
+    ],
+    "mascota": [
+         {"name": "Comida Perro Advance", "link": "https://www.amazon.es/dp/B01F3ELT2C"},
+         {"name": "Arena Gatos Aglomerante", "link": "https://www.amazon.es/dp/B003V67A8Q"}
+    ]
 }
 
 # --- LÓGICA DEL CEREBRO (IA) ---
@@ -145,79 +202,94 @@ def analizar_producto(brand="", title=""):
             break
             
     if is_vip_brand:
-        return 10, "Excelente Elección", "✅ Marca líder verificada. Compra segura.", None
-
-    # 2. Análisis Técnico (Solo si no es VIP)
-    if not is_vip_brand:
+        score = 10
+        veredicto = "Excelente Elección"
+        detalles = "✅ Marca líder verificada. Compra segura."
+    else:
+        # 2. Análisis Técnico (Solo si no es VIP)
         if brand_clean.isupper() and len(brand_clean) < 10:
             score -= 4
             reasons.append("Marca genérica no reconocida.")
         if "http" not in title_low and len(title_low) > 250:
             score -= 2
             reasons.append("Título excesivamente largo.")
+            
+        if score >= 8:
+            veredicto = "Producto Seguro"
+            detalles = "✅ Análisis positivo. Puedes comprar con confianza."
+        elif score >= 5:
+            veredicto = "Precaución"
+            detalles = " ".join(reasons) if reasons else "Faltan datos de fiabilidad."
+        else:
+            veredicto = "⚠️ Sospechoso"
+            detalles = " ".join(reasons)
 
-    # 3. Búsqueda de Recomendación
-    recomendacion_final = None
+    # 3. Búsqueda de Recomendaciones (LISTA MULTI-OPCIÓN)
+    lista_final = []
     
-    for clave, info in PRODUCTOS_TOP.items():
+    for clave, lista_opciones in PRODUCTOS_TOP.items():
         if clave in title_low:
-            # Si el usuario ya está viendo el producto bueno
-            if info["name"].lower().split()[0] in title_low: 
-                return 10, "Excelente Elección", "✅ Has elegido el producto mejor valorado de la categoría.", None
+            # Encontramos la categoría, procesamos las opciones
+            for opcion in lista_opciones:
+                # Si el usuario ya ve este producto (si es VIP), lo saltamos
+                if opcion["name"].lower().split()[0] in title_low and is_vip_brand:
+                    continue 
+                
+                # Construcción del link con TAG
+                link_base = opcion["link"]
+                final_link = f"{link_base}&tag={AMAZON_TAG}" if "?" in link_base else f"{link_base}?tag={AMAZON_TAG}"
+                
+                lista_final.append({
+                    "name": opcion["name"],
+                    "link": final_link
+                })
             
-            # Construcción segura del enlace
-            link_base = info["link"]
-            final_link = f"{link_base}&tag={AMAZON_TAG}" if "?" in link_base else f"{link_base}?tag={AMAZON_TAG}"
-            
-            recomendacion_final = {
-                "name": info["name"],
-                "link": final_link
-            }
-            break
+            if lista_final:
+                break 
 
-    # 4. Mensaje si NO encontramos nada (Petición del usuario)
-    if not recomendacion_final and not is_vip_brand and score < 7:
-        return 0, "Sin Análisis", "⚠️ Lo sentimos; este producto aún no lo hemos analizado en nuestra base de datos.", None
-
-    # 5. Veredicto estándar (Si no es VIP pero tampoco es horrible)
-    if score >= 8:
-        veredicto = "Producto Seguro"
-        detalles = "✅ Análisis positivo. Puedes comprar con confianza."
-    elif score >= 5:
-        veredicto = "Precaución"
-        detalles = " ".join(reasons) if reasons else "Faltan datos de fiabilidad."
-    else:
-        veredicto = "⚠️ Sospechoso"
-        detalles = " ".join(reasons)
+    # 4. Mensaje si NO encontramos nada (EL MENSAJE QUE PEDISTE)
+    if not lista_final and not is_vip_brand and score < 7:
+        return 0, "Sin Análisis", "⚠️ Lo sentimos; este producto aún no lo hemos analizado en nuestra base de datos.", []
     
-    return score, veredicto, detalles, recomendacion_final
+    return score, veredicto, detalles, lista_final
 
-# --- RUTA EXTENSIÓN ---
+# --- RUTA EXTENSIÓN (Chrome) ---
 @app.post("/analyze")
 async def analyze_ext(product: Product):
-    score, veredicto, detalles, rec = analizar_producto(product.brand, product.title)
+    score, veredicto, detalles, lista_recs = analizar_producto(product.brand, product.title)
+    
+    # La extensión mostrará la Opción 1 de la lista
+    recomendacion_principal = lista_recs[0] if lista_recs else None
+    
     return {
         "score": score,
         "reason": f"{veredicto}: {detalles}",
-        "recommendation": rec
+        "recommendation": recomendacion_principal
     }
 
-# --- RUTA TELEGRAM ---
+# --- RUTA TELEGRAM (Multi-Opción) ---
 async def start(update: Update, context):
-    await update.message.reply_text("👋 ¡Hola! Soy TrustLens. Envíame un enlace de Amazon y te diré si es seguro.")
+    await update.message.reply_text("👋 ¡Hola! Soy TrustLens. Envíame un enlace de Amazon y te daré las mejores opciones.")
 
 async def handle_msg(update: Update, context):
     user_text = update.message.text
     if "amazon" in user_text.lower() or "amzn" in user_text.lower():
-        await update.message.reply_text("🕵️ Analizando...")
+        await update.message.reply_text("🕵️ Analizando producto...")
         
-        score, veredicto, detalles, rec = analizar_producto(brand="", title=user_text)
+        score, veredicto, detalles, lista_recs = analizar_producto(brand="", title=user_text)
         
+        # Caso especial: Producto no analizado y sospechoso
+        if veredicto == "Sin Análisis":
+             await update.message.reply_text(detalles)
+             return
+
         msg = f"🔍 *Análisis TrustLens*\n\n📊 Veredicto: {veredicto}\n📝 {detalles}\n"
         
-        if rec:
-            msg += f"\n💡 *Alternativa Recomendada:*\n[{rec['name']}]({rec['link']})"
-            
+        if lista_recs:
+            msg += "\n💡 *Mejores Alternativas (Haz clic para ver):*\n"
+            for i, rec in enumerate(lista_recs, 1):
+                msg += f"\n{i}. [{rec['name']}]({rec['link']})"
+        
         await update.message.reply_markdown(msg)
     else:
         await update.message.reply_text("❌ Por favor, envía un enlace válido de Amazon.")
