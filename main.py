@@ -6,8 +6,8 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # --- CONFIGURACIÓN (RELLENA ESTO) ---
-TELEGRAM_TOKEN = "TU_TOKEN_DE_BOTFATHER_AQUÍ"
-AMAZON_TAG = "TU_TAG_AFILIADO-21" 
+TELEGRAM_TOKEN = "7987693972:AAGL5lBHffpOjRjVodVcqqNK0XhTg-zFWRA"
+AMAZON_TAG = "trustlens05-21" 
 
 app = FastAPI()
 
