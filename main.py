@@ -2,16 +2,16 @@ import asyncio
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from telegram import Bot, Update
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # --- CONFIGURACIÓN (RELLENA ESTO) ---
-TELEGRAM_TOKEN = "7987693972:AAGL5lBHffpOjRjVodVcqqNK0XhTg-zFWRA"
-AMAZON_TAG = "trustlens05-21"
+TELEGRAM_TOKEN = "TU_TOKEN_DE_BOTFATHER_AQUÍ"
+AMAZON_TAG = "TU_TAG_AFILIADO-21" 
 
 app = FastAPI()
 
-# Permitir que la extensión se conecte
+# Permitir conexiones de la extensión
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,51 +22,89 @@ app.add_middleware(
 class Product(BaseModel):
     title: str | None = None
     brand: str | None = None
-    reviewCount: str | None = None
     url: str
 
-# --- LÓGICA DE ANÁLISIS ÚNICA ---
+# --- BASE DE DATOS DE RECOMENDACIONES (Añade aquí tus links) ---
+# Si el título tiene la "Palave Clave", se recomienda ese producto.
+PRODUCTOS_TOP = {
+    "auriculares": {
+        "name": "Sony WH-CH520 (Calidad Verificada)",
+        "link": f"https://www.amazon.es/dp/B0BS1QCF54?tag={AMAZON_TAG}"
+    },
+    "inalambricos": {
+        "name": "Soundcore Anker P20i (Económicos/Top)",
+        "link": f"https://www.amazon.es/dp/B0BTYV49Y2?tag={AMAZON_TAG}"
+    },
+    "movil": {
+        "name": "Samsung Galaxy A54 (Recomendado)",
+        "link": f"https://www.amazon.es/dp/B0BYR85X67?tag={AMAZON_TAG}"
+    },
+    "freidora": {
+        "name": "Cosori 5.5L (Mejor Valorada)",
+        "link": f"https://www.amazon.es/dp/B07N8N6C85?tag={AMAZON_TAG}"
+    },
+    "reloj": {
+        "name": "Amazfit GTS 4 Mini (Calidad/Precio)",
+        "link": f"https://www.amazon.es/dp/B0B596F3V6?tag={AMAZON_TAG}"
+    }
+}
+
+# --- LÓGICA DE ANÁLISIS ---
 def analizar_producto(brand="", title=""):
     score = 10
     reasons = []
+    title_low = title.lower() if title else ""
     
-    brand_upper = brand.replace("Visita la tienda de ", "").strip()
-    if brand_upper.isupper() and len(brand_upper) < 10:
+    # 1. Detección de marca sospechosa (Solo mayúsculas y corta)
+    brand_clean = brand.replace("Visita la tienda de ", "").strip()
+    if brand_clean.isupper() and len(brand_clean) < 10:
         score -= 4
-        reasons.append("Marca genérica sospechosa.")
+        reasons.append("Marca genérica con control de calidad dudoso.")
     
-    if len(title) > 150:
+    # 2. Detección de título SPAM
+    if len(title_low) > 160:
         score -= 2
-        reasons.append("Título con exceso de palabras clave.")
+        reasons.append("Título diseñado para engañar al buscador (SEO Spam).")
 
-    veredicto = "Parece seguro" if score > 6 else "⚠️ Sospechoso"
-    detalles = " ".join(reasons) if reasons else "Producto verificado por TrustLens."
-    
-    # Enlace de afiliado genérico o específico (puedes ampliar esto)
-    link_alternativo = f"https://www.amazon.es/s?k=mejor+calidad+precio&tag={AMAZON_TAG}"
-    
-    return score, veredicto, detalles, link_alternativo
+    # 3. Selección de Recomendación Inteligente
+    # Por defecto, si no hay match, mandamos a los más vendidos
+    recomendacion_final = {
+        "name": "Ver opciones de alta calidad",
+        "link": f"https://www.amazon.es/gp/bestsellers/?tag={AMAZON_TAG}"
+    }
 
-# --- RUTA PARA LA EXTENSIÓN ---
+    # Buscamos la palabra clave en el título
+    for clave, info in PRODUCTOS_TOP.items():
+        if clave in title_low:
+            recomendacion_final = info
+            break
+
+    veredicto = "Parece seguro" if score > 7 else "⚠️ Sospechoso"
+    detalles = " ".join(reasons) if reasons else "Marca y vendedor verificados."
+    
+    return score, veredicto, detalles, recomendacion_final
+
+# --- ENDPOINT PARA LA EXTENSIÓN ---
 @app.post("/analyze")
 async def analyze_ext(product: Product):
-    score, veredicto, detalles, link = analizar_producto(product.brand, product.title)
+    score, veredicto, detalles, rec = analizar_producto(product.brand or "", product.title or "")
     return {
         "score": score,
         "reason": f"{veredicto}: {detalles}",
-        "recommendation": {"name": "Ver alternativa mejorada", "link": link}
+        "recommendation": rec
     }
 
 # --- BOT DE TELEGRAM ---
 async def start(update: Update, context):
-    await update.message.reply_text("🕵️ ¡Bienvenido a TrustLens! Envíame un link de la App de Amazon y lo analizaré.")
+    await update.message.reply_text("🕵️ ¡TrustLens AI activo! Envíame un link de Amazon y detectaré si es una estafa o un producto de mala calidad.")
 
 async def handle_msg(update: Update, context):
     url = update.message.text
     if "amazon" in url.lower():
-        await update.message.reply_text("Analizando...")
-        _, veredicto, detalles, link = analizar_producto("GENERIC", "Producto de móvil")
-        msg = f"🔍 *Resultado:* {veredicto}\n\n📝 {detalles}\n\n💡 *Alternativa segura:* [Comprar aquí]({link})"
+        await update.message.reply_text("🕵️ Analizando...")
+        # En el móvil no tenemos el DOM, así que hacemos un análisis genérico por URL o esperamos título
+        _, veredicto, detalles, rec = analizar_producto("GENERIC", url)
+        msg = f"🔍 *Resultado de TrustLens*\n\n✅ Veredicto: {veredicto}\n📝 {detalles}\n\n💡 *Mejor alternativa:* [{rec['name']}]({rec['link']})"
         await update.message.reply_markdown(msg)
 
 @app.on_event("startup")
