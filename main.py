@@ -1,6 +1,6 @@
 import asyncio
 import unicodedata
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from urllib.parse import urlencode
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,129 +21,121 @@ class Product(BaseModel):
     brand: str = ""
     url: str = ""
 
-# --- UTILIDADES ---
+# --- UTILIDADES DE TEXTO ---
 def normalizar(texto: str) -> str:
     if not texto: return ""
-    # Quita tildes, convierte a minúsculas y limpia espacios
-    return unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8').lower().strip()
+    # Quita tildes, convierte a minúsculas y limpia caracteres especiales
+    return ''.join(c for c in unicodedata.normalize('NFKD', texto) if unicodedata.category(c) != 'Mn').lower().strip()
+
+def extraer_keyword_inteligente(titulo_raw: str) -> str:
+    """Extrae las palabras más relevantes del título para que la recomendación sea coherente."""
+    t_norm = normalizar(titulo_raw)
+    palabras_basura = ["de", "para", "con", "el", "la", "los", "las", "un", "una", "amazon", "oferta", "precio", "talla", "color", "nuevo"]
+    palabras = t_norm.split()
+    # Filtramos palabras cortas o sin significado
+    utiles = [p for p in palabras if p not in palabras_basura and len(p) > 2]
+    # Retornamos las 2 o 3 primeras palabras clave (ej: "botines mujer cuero")
+    return " ".join(utiles[:3]) if utiles else "productos recomendados"
 
 def construir_busqueda_segura(keyword: str) -> str:
-    """Genera un link de Amazon filtrado por 4+ estrellas y Prime (Garantía)"""
-    # Filtros: p_72 (4+ estrellas) y p_85 (Prime)
-    params = {
+    """Genera el enlace de búsqueda filtrado por 4+ estrellas, Prime y con TU AFILIADO."""
+    # Filtros de Amazon: p_72 (4 estrellas o más) y p_85 (Prime)
+    query_params = {
         "k": keyword,
         "rh": "p_72:831280031,p_85:831314031",
-        "tag": AMAZON_TAG
+        "tag": AMAZON_TAG  # <--- TU TAG DE AFILIADO SIEMPRE PRESENTE
     }
-    return f"https://www.amazon.es/s?{urlencode(params)}"
+    return f"https://www.amazon.es/s?{urlencode(query_params)}"
 
-# --- BASE DE DATOS DE MARCAS FIABLES ---
+# --- MARCAS FIABLES ---
 MARCAS_TOP = [
     "sony", "samsung", "apple", "xiaomi", "lg", "philips", "bosch", "logitech", "hp", "lenovo", 
     "asus", "dell", "cosori", "cecotec", "roborock", "braun", "oral-b", "remington", "nike", 
     "adidas", "nintendo", "playstation", "xbox", "garmin", "amazfit", "dodot", "lego", "ghd", 
-    "rowenta", "tefal", "moulinex", "dyson", "irobot", "anker", "huawei", "msi", "acer"
+    "rowenta", "tefal", "moulinex", "dyson", "irobot", "anker", "huawei", "msi", "acer", "clarks", "isdin"
 ]
 
-# --- DICCIONARIO DE CATEGORÍAS (Para recomendaciones inteligentes) ---
+# --- CATEGORÍAS FIJAS (Sinónimos) ---
 CATEGORIAS = {
     "auriculares": ["headphones", "cascos", "airpods", "earbuds"],
     "portatil": ["laptop", "ordenador", "macbook"],
     "movil": ["smartphone", "telefono", "iphone", "galaxy"],
     "freidora": ["air fryer", "cosori", "freidora sin aceite"],
-    "reloj": ["smartwatch", "reloj inteligente", "garmin", "apple watch"],
-    "aspirador": ["conga", "roborock", "roomba", "aspiradora"],
-    "teclado": ["keyboard", "teclado mecanico"],
-    "zapatillas": ["sneakers", "zapatos deportivos", "nike", "adidas"]
+    "reloj": ["smartwatch", "reloj inteligente"],
+    "zapatillas": ["sneakers", "zapatos", "botas", "botines", "calzado"]
 }
 
-# --- LÓGICA DE ANÁLISIS ---
+# --- LÓGICA CORE ---
 def analizar_inteligente(brand_raw, title_raw):
-    title = normalizar(title_raw)
-    brand = normalizar(brand_raw)
+    title_norm = normalizar(title_raw)
+    brand_norm = normalizar(brand_raw)
     
-    # 1. Detectar qué producto es para buscar similares
-    keyword_busqueda = "productos recomendados"
+    # 1. Identificar la palabra clave para la búsqueda
+    keyword_encontrada = ""
     for cat, sinonimos in CATEGORIAS.items():
-        if cat in title or any(s in title for s in sinonimos):
-            keyword_busqueda = cat
+        if cat in title_norm or any(s in title_norm for s in sinonimos):
+            keyword_encontrada = cat
             break
-
-    # 2. Determinar fiabilidad
-    # Caso A: Marca VIP o Título con Marca VIP
-    es_fiable = any(m in brand or m in title for m in MARCAS_TOP)
     
-    # Si la marca es sospechosa (Todo mayúsculas, corta, etc.)
-    if not es_fiable and brand.isupper() and len(brand) < 8:
-        es_fiable = False
+    if not keyword_encontrada:
+        keyword_encontrada = extraer_keyword_inteligente(title_raw)
 
-    # 3. Construir Respuesta según tu solicitud
+    # 2. Análisis de fiabilidad (Caso A o B)
+    es_fiable = any(m in brand_norm or m in title_norm for m in MARCAS_TOP)
+    
     if es_fiable:
         veredicto = "✅ Parece fiable"
-        razon = "Lo sentimos, aún no hemos evaluado este producto; pero parece fiable por la trayectoria de la marca."
+        razon = "Lo sentimos, aún no hemos evaluado este producto; pero parece fiable. También puede visitar estos productos similares:"
         score = 10
     else:
         veredicto = "⚠️ Precaución"
-        razon = "Lo sentimos, aún no hemos evaluado este producto; pero le aconsejamos visitar estos productos similares con mejores garantías."
+        razon = "Lo sentimos, aún no hemos evaluado este producto; pero le aconsejamos visitar estos productos similares con mejores garantías:"
         score = 4
 
-    # 4. Generar 3 Alternativas Reales con Filtro de Garantía
+    # 3. Generar las 3 Alternativas con AFILIADO
     recs = [
-        {"name": f"Opción Premium de {keyword_busqueda.capitalize()}", "link": construir_busqueda_segura(f"{keyword_busqueda} alta gama")},
-        {"name": f"Mejor Calidad/Precio (Verificado)", "link": construir_busqueda_segura(f"{keyword_busqueda} mejor valorado")},
-        {"name": f"Alternativa Prime (Garantía)", "link": construir_busqueda_segura(f"{keyword_busqueda} top ventas")}
+        {"name": f"Opción Premium: {keyword_encontrada.capitalize()}", "link": construir_busqueda_segura(f"{keyword_encontrada} alta gama")},
+        {"name": f"Mejor Calidad/Precio (Prime)", "link": construir_busqueda_segura(f"{keyword_encontrada} verificado")},
+        {"name": f"Alternativa con Garantía +4⭐", "link": construir_busqueda_segura(keyword_encontrada)}
     ]
     
     return score, veredicto, razon, recs
 
-# --- API ENDPOINTS ---
+# --- ENDPOINTS API ---
 @app.post("/analyze")
 async def analyze_ext(product: Product):
     score, veredicto, razon, recs = analizar_inteligente(product.brand, product.title)
     return {
         "score": score,
         "reason": f"{veredicto}: {razon}",
-        "recommendation": recs[1] # Opción central para la extensión
+        "recommendation": recs[1]
     }
 
-# --- TELEGRAM BOT ---
-async def start(update: Update, context):
-    await update.message.reply_text("👋 Hola, soy TrustLens AI. Envíame cualquier enlace de Amazon y analizaré su fiabilidad y garantía.")
-
+# --- TELEGRAM ---
 async def handle_msg(update: Update, context):
     txt = update.message.text
     if "amazon" in txt.lower() or "amzn" in txt.lower():
-        await update.message.reply_text("🕵️ Analizando integridad y valoraciones...")
-        
-        # En Telegram a veces solo tenemos el título/link, el bot lo analiza
+        await update.message.reply_text("🕵️ Analizando fiabilidad y buscando alternativas con garantía...")
         score, veredicto, razon, recs = analizar_inteligente("", txt)
         
-        v_safe = html.escape(veredicto)
-        r_safe = html.escape(razon)
-
-        msg = f"<b>🔍 Informe TrustLens AI</b>\n\n📊 Veredicto: {v_safe}\n📝 {r_safe}\n"
-        msg += "\n💡 <b>Alternativas con Garantía Prime y +4⭐:</b>\n"
+        msg = f"<b>🔍 Informe TrustLens AI</b>\n\n📊 Veredicto: {html.escape(veredicto)}\n📝 {html.escape(razon)}\n"
+        msg += "\n💡 <b>Alternativas con Garantía Prime y Afiliado:</b>\n"
         
         for i, r in enumerate(recs, 1):
-            n_safe = html.escape(r['name'])
-            msg += f"\n{i}. <a href='{r['link']}'>{n_safe}</a>"
+            msg += f"\n{i}. <a href='{r['link']}'>{html.escape(r['name'])}</a>"
         
         await update.message.reply_text(msg, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-    else:
-        await update.message.reply_text("❌ Por favor, envía un enlace válido de Amazon.")
 
 @app.on_event("startup")
 async def startup_bot():
     try:
         application = Application.builder().token(TELEGRAM_TOKEN).build()
-        application.add_handler(CommandHandler("start", start))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
         await application.initialize()
         await application.start()
         asyncio.create_task(application.updater.start_polling(drop_pending_updates=True))
-        print("🤖 Bot de Telegram en marcha...")
     except Exception as e:
-        print(f"⚠️ Error bot: {e}")
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     import uvicorn
