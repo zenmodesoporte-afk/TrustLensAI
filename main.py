@@ -24,9 +24,9 @@ app.add_middleware(
 )
 
 class Product(BaseModel):
-    title: str | None = None
-    brand: str | None = None
-    url: str
+    title: str = ""
+    brand: str = ""
+    url: str = ""
 
 # --- 1. NORMALIZACIÓN DE TEXTO ---
 def normalizar_texto(texto: str) -> str:
