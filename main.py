@@ -1,6 +1,6 @@
 """
 TrustLens - Analizador de productos tech en Amazon
-Solo valora tecnología. Productos no tech muestran mensaje informativo.
+Solo valora tecnología y electrodomésticos. Productos no tech muestran mensaje informativo.
 """
 import os
 import asyncio
@@ -11,9 +11,9 @@ from urllib.parse import urlencode
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 import html
 
 # Cargar .env
@@ -61,8 +61,8 @@ class Product(BaseModel):
 # --- PRODUCTOS TECH + ELECTRODOMÉSTICOS + ACCESORIOS ---
 TECH_KEYWORDS = [
     # Tecnología
-    "tv", "televisor", "television", "smart tv", "oled", "qled", "4k", "uhd",
-    "smartphone", "movil", "móvil", "telefono", "iphone", "galaxy", "celular",
+    "tv", "televisor", "television", "televisión","smart tv", "oled", "qled", "4k", "uhd",
+    "smartphone", "movil", "móvil", "telefono", "teléfono", "iphone", "galaxy", "celular",
     "tablet", "ipad", "kindle", "ereader",
     "portatil", "laptop", "ordenador", "notebook", "macbook",
     "monitor", "pantalla", "display",
@@ -203,21 +203,98 @@ def detectar_termino_busqueda(titulo: str) -> str:
 RH_4_ESTRELLAS = "p_72:831280031"
 RH_PRIME = "p_85:20930978031"
 
+# Rangos de precio para preguntar al usuario (low_cents, high_cents)
+RANGOS_PRECIO = {
+    "a": (0, 2999),       # 0 - 29,99 €
+    "b": (3000, 4999),    # 30 - 49,99 €
+    "c": (5000, 9999),    # 50 - 99,99 €
+    "d": (10000, None),   # más de 100 €
+}
+
+
+def teclado_rango_precio() -> InlineKeyboardMarkup:
+    kb = [
+        [InlineKeyboardButton("a) 0 - 29,99 €", callback_data="price_a")],
+        [InlineKeyboardButton("b) 30 - 49,99 €", callback_data="price_b")],
+        [InlineKeyboardButton("c) 50 - 99,99 €", callback_data="price_c")],
+        [InlineKeyboardButton("d) Más de 100 €", callback_data="price_d")],
+    ]
+    return InlineKeyboardMarkup(kb)
+
+
+def _enviar_links_busqueda(bot, chat_id: int, termino: str, low_p: int | None, high_p: int | None):
+    """Envía los 3 enlaces de búsqueda con el rango de precio indicado."""
+    filtro_calidad = [RH_4_ESTRELLAS]
+    def mk_link(sort, rh=None):
+        return construir_link(termino, sort=sort, rh_filters=rh or filtro_calidad, low_price=low_p, high_price=high_p)
+    links = [
+        (f"{termino} – Mejor valorados", mk_link("review-rank")),
+        (f"{termino} – Más vendidos", mk_link("popularity-rank")),
+        (f"{termino} – Prime", mk_link("review-rank", [RH_4_ESTRELLAS, RH_PRIME])),
+    ]
+    link_esc = lambda u: u.replace("&", "&amp;")
+    partes = [f"🔍 <b>Top productos para: {html.escape(termino)}</b>"]
+    if low_p is not None or high_p is not None:
+        rango = []
+        if low_p is not None:
+            rango.append(f"desde {low_p//100}€")
+        if high_p is not None:
+            rango.append(f"hasta {high_p//100}€")
+        partes[0] += f" ({', '.join(rango)})"
+    partes[0] += "\n"
+    for i, (nombre, url) in enumerate(links, 1):
+        partes.append(f'{i}. <a href="{link_esc(url)}">{html.escape(nombre)}</a>')
+    return bot.send_message(
+        chat_id=chat_id,
+        text="\n".join(partes),
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
+
+
+def extraer_rango_precio(texto: str) -> tuple[int | None, int | None]:
+    """Extrae rango de precio del texto. Devuelve (low_cents, high_cents) o (None, None).
+    Ej: 'menos de 50' -> (None, 5000), '50-100' -> (5000, 10000), 'más de 200' -> (20000, None)
+    """
+    t = (texto or "").lower().strip()
+    low, high = None, None
+    # Buscar números con € o euros
+    numeros = re.findall(r"(\d+)\s*(?:€|euros?|eur)?", t, re.I)
+    if not numeros:
+        return (None, None)
+    vals = [int(n) for n in numeros[:2]]
+    if "menos de" in t or "hasta" in t or "máximo" in t:
+        high = (vals[0] if vals else 0) * 100
+        return (None, high)
+    if "más de" in t or "desde" in t or "mínimo" in t:
+        low = (vals[0] if vals else 0) * 100
+        return (low, None)
+    if len(vals) >= 2:
+        return (vals[0] * 100, vals[1] * 100)
+    if len(vals) == 1:
+        return (vals[0] * 100, None)
+    return (None, None)
+
 
 def construir_link(
     keyword: str,
     sort: str | None = None,
     rh_filters: list[str] | None = None,
+    low_price: int | None = None,
+    high_price: int | None = None,
 ) -> str:
     """Construye URL de búsqueda Amazon.es con filtros.
-    sort: 'review-rank' (valoración), 'popularity-rank' (más vendidos)
-    rh_filters: lista de filtros rh, ej. [RH_4_ESTRELLAS] o [RH_4_ESTRELLAS, RH_PRIME]
+    Precios en céntimos (50€ = 5000).
     """
     params = {"k": keyword.strip(), "tag": AMAZON_TAG}
     if sort:
         params["s"] = sort
     if rh_filters:
         params["rh"] = ",".join(rh_filters)
+    if low_price:
+        params["low-price"] = str(low_price)
+    if high_price:
+        params["high-price"] = str(high_price)
     return f"https://www.amazon.es/s?{urlencode(params)}"
 
 
@@ -367,16 +444,37 @@ START_MSG = """🔍 *TrustLens* – Analizador de productos tech en Amazon
 *Tienes 2 opciones:*
 
 1️⃣ *Pega un enlace* de un producto de Amazon  
-   → Te daré la valoración (0-10), motivos y 3 alternativas
+   → Te daré valoración (0-10), precio, motivos y 3 alternativas
 
-2️⃣ *Escribe el tipo de producto* (ej: TV 55 pulgadas, smartphone, auriculares)  
-   → Te daré enlace a los 3 productos con mejores valoraciones
+2️⃣ *Escribe el tipo de producto* (ej: TV 55, auriculares, lavadora)  
+   → Te pediré elegir rango de precio (0-30€, 30-50€, 50-100€, +100€)  
+   → O escribe el rango en el mensaje: "auriculares menos de 50€"
 
-Solo analizamos productos de *tecnología*. Otros productos mostrarán un mensaje informativo."""
+Solo analizamos *tecnología y electrodomésticos*."""
 
 
 async def cmd_start(update: Update, context):
     await update.message.reply_text(START_MSG, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+    context.user_data.pop("awaiting_price", None)
+    context.user_data.pop("termino", None)
+
+
+async def handle_price_callback(update: Update, context):
+    """Procesa la elección de rango de precio del usuario."""
+    q = update.callback_query
+    await q.answer()
+    if not q.data or not q.data.startswith("price_"):
+        return
+    opt = q.data.replace("price_", "")
+    if opt not in RANGOS_PRECIO:
+        return
+    termino = context.user_data.pop("termino", None)
+    context.user_data.pop("awaiting_price", None)
+    if not termino:
+        await q.edit_message_text("La sesión ha expirado. Vuelve a buscar el producto.")
+        return
+    low_p, high_p = RANGOS_PRECIO[opt]
+    await _enviar_links_busqueda(context.bot, q.message.chat_id, termino, low_p, high_p)
 
 
 async def handle_msg(update: Update, context):
@@ -384,13 +482,12 @@ async def handle_msg(update: Update, context):
     if not txt:
         return
 
-    await update.message.reply_text("🕵️ Analizando...")
-
     product_url = txt if es_url_amazon(txt) else ""
     title, brand, sold_by, fulfilled_by, has_coupon = "", "", "", "", False
-    rating, review_count = "", ""
+    rating, review_count, price = "", "", ""
 
     if es_url_amazon(txt):
+        await update.message.reply_text("🕵️ Analizando...")
         try:
             from scraper import extraer_datos_producto
             d = extraer_datos_producto(txt)
@@ -403,6 +500,7 @@ async def handle_msg(update: Update, context):
                 product_url = d.get("url", txt)
                 rating = d.get("rating", "")
                 review_count = d.get("reviewCount", "")
+                price = d.get("price", "") or ""
         except Exception as e:
             logger.warning("Scraper: %s", e)
     else:
@@ -411,22 +509,19 @@ async def handle_msg(update: Update, context):
             await update.message.reply_text(MSG_NO_TECH)
             return
         termino = detectar_termino_busqueda(txt)
-        filtro_calidad = [RH_4_ESTRELLAS]  # 4+ estrellas
-        links = [
-            (f"{termino} – Mejor valorados", construir_link(termino, sort="review-rank", rh_filters=filtro_calidad)),
-            (f"{termino} – Más vendidos", construir_link(termino, sort="popularity-rank", rh_filters=filtro_calidad)),
-            (f"{termino} – Prime", construir_link(termino, sort="review-rank", rh_filters=[RH_4_ESTRELLAS, RH_PRIME])),
-        ]
-        # Usar HTML para enlaces más fiables en Telegram
-        link_esc = lambda u: u.replace("&", "&amp;")
-        partes = [f"🔍 <b>Top productos para: {html.escape(termino)}</b>\n"]
-        for i, (nombre, url) in enumerate(links, 1):
-            partes.append(f'{i}. <a href="{link_esc(url)}">{html.escape(nombre)}</a>')
-        await update.message.reply_text(
-            "\n".join(partes),
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True,
-        )
+        low_p, high_p = extraer_rango_precio(txt)
+        # Si no especificó precio, preguntar con teclado
+        if low_p is None and high_p is None:
+            context.user_data["termino"] = termino
+            context.user_data["awaiting_price"] = True
+            await update.message.reply_text(
+                f"💰 <b>Elige un rango de precio para: {html.escape(termino)}</b>",
+                parse_mode=ParseMode.HTML,
+                reply_markup=teclado_rango_precio(),
+            )
+            return
+        # Tiene rango de precio: devolver enlaces directamente
+        await _enviar_links_busqueda(context.bot, update.effective_chat.id, termino, low_p, high_p)
         return
 
     if not title:
@@ -444,6 +539,8 @@ async def handle_msg(update: Update, context):
 
     cupon_badge = " 🏷️ Cupón disponible" if has_coupon else ""
     msg = f"{r['emoji']} <b>TrustLens: {r['score']}/10</b>{cupon_badge}\n\n"
+    if price:
+        msg += f"💰 <b>Precio:</b> {html.escape(price)}\n\n"
     msg += f"<b>{r['tituloMsg']}</b>\n\n"
     for d in r["details"]:
         msg += f"• {html.escape(str(d))}\n"
@@ -465,6 +562,7 @@ async def startup_bot():
     try:
         bot = Application.builder().token(TELEGRAM_TOKEN).build()
         bot.add_handler(CommandHandler("start", cmd_start))
+        bot.add_handler(CallbackQueryHandler(handle_price_callback, pattern="^price_[abcd]$"))
         bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
         await bot.initialize()
         await bot.start()
