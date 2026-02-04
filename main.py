@@ -82,7 +82,7 @@ TECH_KEYWORDS = [
     "altavoz", "speaker", "soundbar", "alexa", "google home",
     # Electrodomésticos
     "electrodoméstico", "electrodomestico",
-    "lavadora", "nevera", "frigorifico", "frigorífico", "lavavajillas",
+    "lavadora", "nevera", "congelador", "frigorifico", "frigorífico", "lavavajillas",
     "horno", "microondas", "cafetera", "batidora", "tostadora", "plancha",
     "secadora", "aire acondicionado", "ventilador", "aspiradora",
     "robot cocina", "termomix", "airfryer", "freidora aire",
@@ -96,6 +96,7 @@ MARCAS_VIP = [
     "dell", "acer", "msi", "logitech", "anker", "jbl", "bose", "sennheiser",
     "xiaomi", "huawei", "oneplus", "google", "amazon", "microsoft",
     "roborock", "dyson", "cecotec", "tp-link", "asus", "netgear",
+    "candy", "bosch", "siemens", "electrolux", "whirlpool", "beko", "aeg",
 ]
 
 
@@ -142,7 +143,7 @@ def extraer_especificaciones(titulo: str) -> str:
     """Extrae specs para alternativas coherentes: 55", 32 pulgadas, etc."""
     t = titulo
     specs = []
-    for pat in [r"(\d+)\s*['\"]", r"(\d+)\s*pulgada", r"(\d+)\s*inch", r"(\d+)\s*gb", r"(\d+)\s*tb"]:
+    for pat in [r"(\d+)\s*['\"]", r"(\d+)\s*pulgada", r"(\d+)\s*inch", r"(\d+)\s*gb", r"(\d+)\s*tb", r"(\d+)\s*kg"]:
         m = re.search(pat, t, re.I)
         if m:
             specs.append(m.group(0).strip())
@@ -150,11 +151,22 @@ def extraer_especificaciones(titulo: str) -> str:
 
 
 def detectar_termino_busqueda(titulo: str) -> str:
-    """Término base para alternativas (solo tech)."""
+    """Término base para alternativas. Prioriza tipo de producto sobre marca (ej. Candy lavadora -> lavadora)."""
     if not titulo or len(titulo) < 3:
         return "producto tech"
     t = normalizar(titulo)
+    # Orden: electrodomésticos primero (evita Candy->caramelos), luego tech
     mapping = [
+        ("lavadora", ["lavadora", "washer"]),
+        ("secadora", ["secadora", "secaropa"]),
+        ("nevera", ["nevera", "frigorifico", "frigorífico", "refrigerador"]),
+        ("congelador", ["congelador", "freezer"]),
+        ("lavavajillas", ["lavavajillas", "lavavajilla"]),
+        ("horno", ["horno", "hornos"]),
+        ("microondas", ["microondas"]),
+        ("cafetera", ["cafetera", "cafeteras"]),
+        ("aspiradora", ["aspiradora", "aspirador"]),
+        ("robot aspirador", ["robot aspirador", "roomba", "roborock"]),
         ("tv 55", ["tv 55", "55 pulgadas", "55 inch", "televisor 55"]),
         ("tv 65", ["tv 65", "65 pulgadas", "65 inch"]),
         ("tv 50", ["tv 50", "50 pulgadas"]),
@@ -171,13 +183,18 @@ def detectar_termino_busqueda(titulo: str) -> str:
         ("power bank", ["power bank", "bateria externa"]),
         ("fire stick", ["fire stick", "fire tv"]),
         ("chromecast", ["chromecast"]),
-        ("robot aspirador", ["robot aspirador", "roomba", "roborock"]),
     ]
     specs = extraer_especificaciones(titulo)
     for term, kws in mapping:
         if any(kw in t for kw in kws):
             return f"{term} {specs}".strip()
-    return (t.split()[0] if t else "producto") + " " + specs
+    # Fallback: primera palabra relevante (evitar marcas que coinciden con palabras comunes)
+    excluir = ("the", "and", "para", "con", "pro", "max", "plus", "candy", "new")
+    palabras = t.split()
+    for p in palabras:
+        if len(p) > 2 and p not in excluir:
+            return f"{p} {specs}".strip()
+    return ("producto" + " " + specs).strip()
 
 
 # Parámetros Amazon.es: 4+ estrellas, Prime
