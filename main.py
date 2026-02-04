@@ -303,6 +303,7 @@ async def search_top3(q: str):
     return {"isTech": True, "link": link, "searchTerm": termino}
 
 
+@app.get("/")
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "TrustLens"}
