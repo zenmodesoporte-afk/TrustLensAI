@@ -58,8 +58,9 @@ class Product(BaseModel):
     fulfilledBy: str | None = None
 
 
-# --- PRODUCTOS TECH (única categoría valorada) ---
+# --- PRODUCTOS TECH + ELECTRODOMÉSTICOS + ACCESORIOS ---
 TECH_KEYWORDS = [
+    # Tecnología
     "tv", "televisor", "television", "smart tv", "oled", "qled", "4k", "uhd",
     "smartphone", "movil", "móvil", "telefono", "iphone", "galaxy", "celular",
     "tablet", "ipad", "kindle", "ereader",
@@ -79,6 +80,15 @@ TECH_KEYWORDS = [
     "cámara", "camara", "gopro",
     "consola", "playstation", "xbox", "nintendo",
     "altavoz", "speaker", "soundbar", "alexa", "google home",
+    # Electrodomésticos
+    "electrodoméstico", "electrodomestico",
+    "lavadora", "nevera", "frigorifico", "frigorífico", "lavavajillas",
+    "horno", "microondas", "cafetera", "batidora", "tostadora", "plancha",
+    "secadora", "aire acondicionado", "ventilador", "aspiradora",
+    "robot cocina", "termomix", "airfryer", "freidora aire",
+    # Accesorios (tech/móvil)
+    "accesorio", "funda", "soporte", "base de carga", "adaptador",
+    "protector pantalla", "mochila portatil", "maletin",
 ]
 
 MARCAS_VIP = [
@@ -415,12 +425,13 @@ async def handle_msg(update: Update, context):
     def esc_url(u):
         return (u or "").replace("&", "&amp;")
 
-    msg = f"{r['emoji']} <b>TrustLens: {r['score']}/10</b>\n\n"
+    cupon_badge = " 🏷️ Cupón disponible" if has_coupon else ""
+    msg = f"{r['emoji']} <b>TrustLens: {r['score']}/10</b>{cupon_badge}\n\n"
     msg += f"<b>{r['tituloMsg']}</b>\n\n"
     for d in r["details"]:
         msg += f"• {html.escape(str(d))}\n"
     if has_coupon:
-        msg += "\n⚠️ ¡Cupón disponible! No olvides marcarlo.\n"
+        msg += "\n⚠️ <b>¡Cupón de descuento!</b> No olvides marcarlo antes de comprar.\n"
     msg += f"\n{html.escape(r['altText'])}\n"
     if r.get("buyLink"):
         msg += f"\n🛒 <a href=\"{esc_url(r['buyLink'])}\">{html.escape(r['btnText'])}</a>\n"
