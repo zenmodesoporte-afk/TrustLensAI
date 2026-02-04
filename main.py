@@ -170,8 +170,27 @@ def detectar_termino_busqueda(titulo: str) -> str:
     return (t.split()[0] if t else "producto") + " " + specs
 
 
-def construir_link(keyword: str) -> str:
+# Parámetros Amazon.es: 4+ estrellas, Prime
+# p_72:831280031 = 4+ estrellas en Amazon.es
+# p_85:20930978031 = Prime en Amazon.es
+RH_4_ESTRELLAS = "p_72:831280031"
+RH_PRIME = "p_85:20930978031"
+
+
+def construir_link(
+    keyword: str,
+    sort: str | None = None,
+    rh_filters: list[str] | None = None,
+) -> str:
+    """Construye URL de búsqueda Amazon.es con filtros.
+    sort: 'review-rank' (valoración), 'popularity-rank' (más vendidos)
+    rh_filters: lista de filtros rh, ej. [RH_4_ESTRELLAS] o [RH_4_ESTRELLAS, RH_PRIME]
+    """
     params = {"k": keyword.strip(), "tag": AMAZON_TAG}
+    if sort:
+        params["s"] = sort
+    if rh_filters:
+        params["rh"] = ",".join(rh_filters)
     return f"https://www.amazon.es/s?{urlencode(params)}"
 
 
@@ -246,10 +265,11 @@ def analizar_tech(brand: str, title: str, rating: str, review_count: str,
         btn_text = "Comprar igualmente"
         alt_text = "Te recomiendo consultar estas otras opciones:"
 
+    filtro_calidad = [RH_4_ESTRELLAS]  # 4+ estrellas (proxy de productos con buena valoración)
     recs = [
-        {"name": f"{termino} – Mejor valorados", "link": construir_link(termino)},
-        {"name": f"{termino} – Más vendidos", "link": construir_link(f"{termino} mas vendido")},
-        {"name": f"{termino} – Prime", "link": construir_link(f"{termino} prime")},
+        {"name": f"{termino} – Mejor valorados", "link": construir_link(termino, sort="review-rank", rh_filters=filtro_calidad)},
+        {"name": f"{termino} – Más vendidos", "link": construir_link(termino, sort="popularity-rank", rh_filters=filtro_calidad)},
+        {"name": f"{termino} – Prime", "link": construir_link(termino, sort="review-rank", rh_filters=[RH_4_ESTRELLAS, RH_PRIME])},
     ]
     for r in recs:
         r["affiliate_link"] = r["link"]
@@ -295,12 +315,17 @@ async def analyze(product: Product):
 
 @app.get("/search")
 async def search_top3(q: str):
-    """Búsqueda directa: devuelve enlace a top 3 productos (solo tech)."""
+    """Búsqueda directa: devuelve enlaces a productos (solo tech)."""
     termino = q.strip() or "producto"
     if not es_tech(termino, ""):
         return {"isTech": False, "message": MSG_NO_TECH}
-    link = construir_link(termino)
-    return {"isTech": True, "link": link, "searchTerm": termino}
+    filtro = [RH_4_ESTRELLAS]
+    links = {
+        "mejor_valorados": construir_link(termino, sort="review-rank", rh_filters=filtro),
+        "mas_vendidos": construir_link(termino, sort="popularity-rank", rh_filters=filtro),
+        "prime": construir_link(termino, sort="review-rank", rh_filters=[RH_4_ESTRELLAS, RH_PRIME]),
+    }
+    return {"isTech": True, "links": links, "searchTerm": termino}
 
 
 @app.get("/")
@@ -354,16 +379,25 @@ async def handle_msg(update: Update, context):
         except Exception as e:
             logger.warning("Scraper: %s", e)
     else:
-        # Modo búsqueda: enlace a top productos
+        # Modo búsqueda: 3 enlaces (mejor valorados, más vendidos, prime)
         if not es_tech(txt, ""):
             await update.message.reply_text(MSG_NO_TECH)
             return
         termino = detectar_termino_busqueda(txt)
-        link = construir_link(termino)
+        filtro_calidad = [RH_4_ESTRELLAS]  # 4+ estrellas
+        links = [
+            (f"{termino} – Mejor valorados", construir_link(termino, sort="review-rank", rh_filters=filtro_calidad)),
+            (f"{termino} – Más vendidos", construir_link(termino, sort="popularity-rank", rh_filters=filtro_calidad)),
+            (f"{termino} – Prime", construir_link(termino, sort="review-rank", rh_filters=[RH_4_ESTRELLAS, RH_PRIME])),
+        ]
+        # Usar HTML para enlaces más fiables en Telegram
+        link_esc = lambda u: u.replace("&", "&amp;")
+        partes = [f"🔍 <b>Top productos para: {html.escape(termino)}</b>\n"]
+        for i, (nombre, url) in enumerate(links, 1):
+            partes.append(f'{i}. <a href="{link_esc(url)}">{html.escape(nombre)}</a>')
         await update.message.reply_text(
-            f"🔍 *Top productos para: {termino}*\n\n"
-            f"🔗 [Ver en Amazon]({link})",
-            parse_mode=ParseMode.MARKDOWN,
+            "\n".join(partes),
+            parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
         )
         return
@@ -378,18 +412,21 @@ async def handle_msg(update: Update, context):
     r = analizar_tech(brand, title, rating, review_count, sold_by, fulfilled_by, product_url)
     r["hasCoupon"] = has_coupon
 
-    msg = f"{r['emoji']} *TrustLens: {r['score']}/10*\n\n"
-    msg += f"*{r['tituloMsg']}*\n\n"
+    def esc_url(u):
+        return (u or "").replace("&", "&amp;")
+
+    msg = f"{r['emoji']} <b>TrustLens: {r['score']}/10</b>\n\n"
+    msg += f"<b>{r['tituloMsg']}</b>\n\n"
     for d in r["details"]:
-        msg += f"• {d}\n"
+        msg += f"• {html.escape(str(d))}\n"
     if has_coupon:
         msg += "\n⚠️ ¡Cupón disponible! No olvides marcarlo.\n"
-    msg += f"\n{r['altText']}\n"
+    msg += f"\n{html.escape(r['altText'])}\n"
     if r.get("buyLink"):
-        msg += f"\n🛒 [{r['btnText']}]({r['buyLink']})\n"
+        msg += f"\n🛒 <a href=\"{esc_url(r['buyLink'])}\">{html.escape(r['btnText'])}</a>\n"
     for i, rec in enumerate(r["recommendations"], 1):
-        msg += f"{i}. [{rec['name']}]({rec['link']})\n"
-    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+        msg += f"{i}. <a href=\"{esc_url(rec['link'])}\">{html.escape(rec['name'])}</a>\n"
+    await update.message.reply_text(msg, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 
 @app.on_event("startup")
